@@ -1,5 +1,9 @@
-% Generates an operator Curve
-addpath '../lib'
+% Generates an operator Curve, both the theoretical and Simulated. These
+% can be compared in a plot. Also generates a theoretical and Simulated
+% E(n)
+
+%needed when running on linux.
+%addpath '../lib'
 
 %bounds on alpha effective and beta effective
 alpha = 0.01;
@@ -9,9 +13,9 @@ beta = 0.05;
 alpha_effective_bound = alpha / ( 1 - beta);
 beta_effective_bound = beta / ( 1 - alpha);
 
-%tuneing parameters
+%tuneing parameters - Center and width
 p_prime = 0.9;
-delta = 0.09;
+delta = 0.05;
 
 %boundaries of accept and reject region
 p_one = p_prime + delta;
@@ -24,20 +28,20 @@ h = -500:.0001:500;
 A = (1 - beta) / alpha;
 B = beta / ( 1 - alpha);
 
-%operator curve second coordinate (parametric) - L(p)
+%Theoretical operator curve second coordinate (parametric) - L(p)
 L = ((A.^h) - ones(size(h))) ./ (A.^h - B.^h);
 
 %convinent names for probablity ratios
 p_upper = (1 - p_one) / (1 - p_zero);
 p_lower = (p_one) / (p_zero);
 
-%operator curve first coordinate (parametric) - p
+%Theoretical operator curve first coordinate (parametric) - p
 p = (ones(size(h)) - p_upper.^h) ./ (p_lower.^h - p_upper.^h);
 
-%Expected sequence length (E_p(n))
+%Theoretical Expected sequence length (E_p(n))
 E_n = ((L .* log(B)) + ((ones(size(h)) - L) .* log(A))) ./ ((p .* log(p_lower)) + ((ones(size(h)) - p) .* log(p_upper)));
 
-%Graphical test intercepts and slop
+%Graphical test intercepts and slope
 h_zero = (log(B)) / (log(p_lower) - log(p_upper));
 h_one = (log(A)) / (log(p_lower) - log(p_upper));
 s = (log(1 / p_upper)) / (log(p_lower) - log(p_upper));
@@ -49,9 +53,9 @@ L_1 = (s .* m) + (h_one .* ones(size(m)));
 L_0 = (s .* m) + (h_zero .* ones(size(m)));
 
 %Simulation paramters
-p_test = 0:.0001:1;
+p_test = 0:.01:1;
 deadline = 1000000;
-num_steps = 1000;
+num_steps = 100;
 
 %Simulation Storage vars
 calc_E_n = zeros(size(p_test));
@@ -67,7 +71,7 @@ for j = 1:1:length(p_test);
     
     for i = 1:1:length(steps)
         %function that actually generates the data
-        cur_thres = GenOCthreshold(p_test(j),s,h_zero,h_one,deadline)
+        cur_thres = GenOCthreshold(p_test(j),s,h_zero,h_one,deadline);
         
         %result analysis / storage
         steps(i)=cur_thres(4);
@@ -75,6 +79,9 @@ for j = 1:1:length(p_test);
            decision(i)=1;
         end
     end
+    
+    %status update
+    p_test(j)
     
     %per p value store the result
     calc_E_n(j)=mean(steps);

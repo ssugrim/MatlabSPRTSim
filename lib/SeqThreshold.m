@@ -1,4 +1,4 @@
-function [res ] = SeqThreshold( uvec,dvec,lvec )
+function [res] = SeqThreshold( uvec,dvec,lvec )
 %SEQTHRESHOLD Returns the [Upper Value, Data value, Lower vale, Index] of the threshold crossing
 %   Requires 3 vectors, uvec, dvec, and lvec each of size Nx1. Uvec is the 
 %upper limit vecotor Line (L_1) and lvec is the lower anagloue. dvec is the
@@ -12,8 +12,11 @@ lind = find(lcomp==0, 1, 'first');
 uind = find(ucomp==0, 1, 'first');
 
 ind = min([lind,uind]);
-res = [uvec(ind),  dvec(ind), lvec(ind), ind];
 
-
+if isempty(ind)
+    res = [NaN,NaN,NaN,NaN];
+else
+    res = [uvec(ind),  dvec(ind), lvec(ind), ind];
+end
 end
 
