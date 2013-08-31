@@ -23,7 +23,7 @@ m = 0:1:1000;
 %%%%%%%%%% right side hypothesis %%%%%%%%%%%%%%%
 
 %tuneing parameters
-p_prime_rs = 0.7;
+p_prime_rs = 0.8;
 delta_rs = 0.05;
 
 %boundaries of accept and reject region
@@ -47,7 +47,7 @@ L_0_rs = (s_rs .* m) + (h_zero_rs .* ones(size(m)));
 %%%%%%%%%% left side hypothesis %%%%%%%%%%%%%%%
 
 %tuneing parameters
-p_prime_ls = 0.3;
+p_prime_ls = 0.2;
 delta_ls = 0.05;
 
 %boundaries of accept and reject region
@@ -70,22 +70,32 @@ L_0_ls = (s_ls .* m) + (h_zero_ls .* ones(size(m)));
 
 
 %A sample run
-p_actual = 0.55;
+p_actual = 0.75;
 dat = Sample1dim(p_actual,length(m));
 run_sample = count_ones(dat);
 axes();
 hold on;
 
+set(0,'DefaultAxesFontSize',20)
+set(gca, 'FontSize', 20)
+f = figure(1);
+
 %plotting TODO add axes labels
-plot(m,L_1_ls,'--','color','r');
-plot(m,L_0_ls,'--','color','g');
-plot(m,L_1_rs,'--','color','m');
-plot(m,L_0_rs,'--','color','b');
-plot(m,run_sample,'.-','color','k');
-xlim([0,50])
-ylim([0,50])
-act_str = sprintf('Sample Run - P_{actual} = %0.5f', p_actual);
-Left_str = sprintf('Left Side L_1 P_prime = %0.5f', p_prime_ls);
-Right_str = sprintf('Right Side L_1 P_prime = %0.5f', p_prime_rs);
-legend(Left_str,'Left Side L_0',Right_str, 'Right Side L_0', act_str)
+plot(m,L_1_ls,'r-','LineWidth',4);
+legendInfo{1} = 'Left Upper Boundary';
+plot(m,L_1_rs,'b-','LineWidth',4);
+legendInfo{2} = 'Right Upper Boundary';
+plot(m,L_0_rs,'b--','LineWidth',4);
+legendInfo{3} = 'Right Lower Boundary';
+plot(m,L_0_ls,'r--','LineWidth',4);
+legendInfo{4} = 'Left Lower Boundary';
+plot(m,run_sample,'m-o','LineWidth',4);
+legendInfo{5} = 'Random Walk d_n';
+legend(legendInfo);
+xlim([0,50]);
+ylim([-5,55]);
+xlabel('Sample index (m_n)');
+titlestr = sprintf('Sample run of two sided test with p_n = %2.2f',p_actual);
+title(titlestr);
+set(findall(f,'type','text'),'fontSize',20,'fontWeight','bold','LineWidth',4);
 hold off;

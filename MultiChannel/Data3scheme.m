@@ -14,7 +14,7 @@ DEBUG = true;
 deadline = 1000;
 
 %number of Trials to test
-Trials = 5;
+Trials = 2;
 
 %number of channels 
 K = 2^6;
@@ -397,7 +397,7 @@ for i = 1:1:Trials
     Trial_tree_bin_hat_p = zeros(1,K);
     
     %slack factor - number of ones we are willing to miss
-    slack = .3;
+    slack = 0.25;
     
     %Samples per channel per pass 
     pass_sample = 4;
@@ -443,15 +443,31 @@ for i = 1:1:Trials
         %and now distribute measurements that are on the edges
         while used < deadline + 1
             
+            %relaxed too much I must be done (have to let it get past .5
+            %otherwise we miss some channels even though we have
+            %measurements
+            if slack > 0.6
+                break;
+            end
+            
             picked = zeros(1,K);
             %pick a set of channels
             for k = 1:1:K
                 ratio = Trial_tree_d_k(k) / Trial_tree_m_k(k);
-                if ratio < slack || ratio > 1 - slack
+                % parameters are within some bound and the channels haven't
+                % passed some sane limit
+                if (ratio < slack || ratio > 1 - slack) && Trial_tree_m_k(k) < 50
                     picked(k) = 1;
                 end
             end
-            
+
+            %Didn't find any thing worth picking, relax the criteria a bit.
+            if sum(picked) == 0
+                slack = slack + 0.05;
+                sprintf('Bumped up the slack to %f', slack)
+                continue;
+            end
+                        
  %           sprintf('Pass = %d, # picked = %d',pass, length(picked(picked > 0)))
             
             %distribute measurements to the picks
@@ -465,6 +481,7 @@ for i = 1:1:Trials
                 end
             end
             
+            %didn't use any measurements so I must be done
             pass = pass + 1;
         end
     end
@@ -539,20 +556,20 @@ for i = 1:1:Trials
     
     %% Sanity Diagonsitc output
     if DEBUG
-        sprintf('Bins')
-        bin_p_act
-        Trial_SPRT_decision
-        Trial_simple_bin_hat_p
-        Trial_tree_bin_hat_p
-        
-        sprintf('Estimates')
-        p_act
-        Trial_sprt_m_k
-        Trial_simple_hat_p_k
+%         sprintf('Bins')
+%         bin_p_act
+%         Trial_SPRT_decision
+%         Trial_simple_bin_hat_p
+%         Trial_tree_bin_hat_p
+%         
+%         sprintf('Estimates')
+         p_act
+%         Trial_sprt_m_k
+%         Trial_simple_hat_p_k
 %        Trial_simple_d_k
 %        Trial_simple_m_k
         Trial_tree_hat_p_k
-%        Trial_tree_d_k
+        Trial_tree_d_k
         Trial_tree_m_k
     end
         

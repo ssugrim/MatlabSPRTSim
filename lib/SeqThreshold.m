@@ -14,7 +14,7 @@ uind = find(ucomp==0, 1, 'first');
 ind = min([lind,uind]);
 
 if isempty(ind)
-    res = [NaN,NaN,NaN,NaN];
+    res = [Inf,Inf,Inf,Inf];
 else
     res = [uvec(ind),  dvec(ind), lvec(ind), ind];
 end
