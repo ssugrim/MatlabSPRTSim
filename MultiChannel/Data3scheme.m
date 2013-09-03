@@ -14,10 +14,10 @@ DEBUG = true;
 deadline = 1000;
 
 %number of Trials to test
-Trials = 2;
+Trials = 1;
 
 %number of channels 
-K = 2^6;
+K = 2^4;
 
 %number of good channels we want to dig out (a preformance threhold)
 good = 4;
@@ -88,8 +88,8 @@ Data_good_decision_time = zeros(1,Trials);
 %Number of good channels available
 Data_good_available = zeros(1,Trials);
 
-%Number of channels that were completed to a decision
-Data_comp_full = zeros(1,Trials);
+%Number of channels that were Significant to SPRT  - completed to a decision
+Data_SPRT_Significant = zeros(1,Trials);
 
 %Errors made during the trial
 Data_SPRT_error = zeros(Trials,2);
@@ -97,11 +97,17 @@ Data_SPRT_error = zeros(Trials,2);
 %Mean number of measurements per channel for SPRT
 Data_SPRT_mean_m_k = zeros(1,Trials);
 
+%Number of channels that were Significant to Simple  - At least one measurement
+Data_Simple_Significant = zeros(1,Trials);
+
 %Errors made with the simple Stratgey
 Data_Simple_error = zeros(Trials,2);
 
 %Mean number of measurements per channel for Simple
 Data_Simple_mean_m_k = zeros(1,Trials);
+
+%Number of channels that were Significant to Tree  - More than one pass
+Data_Tree_Significant = zeros(1,Trials);
 
 %Errors made with the simple Stratgey
 Data_Tree_error = zeros(Trials,2);
@@ -244,12 +250,12 @@ for i = 1:1:Trials
   
     %% SPRT data Analysis - Collecting error and decision information
     %number of channels completed for trial i
-    Data_comp_full(i) =  sum(Trial_SPRT_decision > 0);
-    dbg_str = sprintf('SPRT charaterized %d at deadline, they were:',Data_comp_full(i));
+    Data_SPRT_Significant(i) =  sum(Trial_SPRT_decision > 0);
+    dbg_str = sprintf('SPRT charaterized %d at deadline, they were:',Data_SPRT_Significant(i));
     dbg_print(dbg_str,DEBUG);
     
     %Daignostic Display
-    %p_act(decision > 0)
+  %  p_act(Trial_SPRT_decision > 0)
     
     %determining all the errors that happened upto the deadline
     
@@ -269,9 +275,14 @@ for i = 1:1:Trials
         end
     end
     
+    %Compute the number of channels in the outer bins
+    Trial_SPRT_outer_bins = length(Trial_SPRT_decision(Trial_SPRT_decision == 3)) + length(Trial_SPRT_decision(Trial_SPRT_decision == 1));
+    dbg_str = sprintf('Number of SPRT channels in the outer bins = %d', Trial_SPRT_outer_bins );
+    dbg_print(dbg_str,DEBUG);
+    
     %compute error rates as number of mistakes divided by number classified
-    sprt_type1_rate = sum(sprt_errors == 1) / Data_comp_full(i);
-    sprt_type2_rate = sum(sprt_errors == 2) / Data_comp_full(i);
+    sprt_type1_rate = sum(sprt_errors == 1) / max(Data_SPRT_Significant(i) - Trial_SPRT_outer_bins, 1);
+    sprt_type2_rate = sum(sprt_errors == 2) / Trial_SPRT_outer_bins;
     
     %Store and Report error rates
     Data_SPRT_error(i,:) = [sprt_type1_rate,sprt_type2_rate];
@@ -359,15 +370,22 @@ for i = 1:1:Trials
     end
     
     %number of channels with a measurement
-    Trial_simple_measured = length(Trial_simple_m_k(Trial_simple_m_k > 0));
-    
+    Trial_simple_measured = sum(Trial_simple_m_k > 0);
     dbg_str = sprintf('Number of measured channels = %d', Trial_simple_measured );
     dbg_print(dbg_str,DEBUG);
+    
+    %Number of channels placed in outer bins
+    Trial_simple_outer_bins = sum(Trial_simple_bin_hat_p == 3) + sum(Trial_simple_bin_hat_p == 1);
+    dbg_str = sprintf('Simple: Number of channels in the outer bins = %d', Trial_simple_outer_bins );
+    dbg_print(dbg_str,DEBUG);
+    
+    
     %compute error rates as number of mistakes divided by number classified
-    simple_type1_rate = sum(simple_errors == 1) / Trial_simple_measured;
-    simple_type2_rate = sum(simple_errors == 2) / Trial_simple_measured;
+    simple_type1_rate = sum(simple_errors == 1) / max(Trial_simple_measured - Trial_simple_outer_bins,1);
+    simple_type2_rate = sum(simple_errors == 2) / Trial_simple_outer_bins;
     
     %Store and report Error Rate
+    Data_Simple_Significant(i) = Trial_simple_measured;
     Data_Simple_error(i,:) = [simple_type1_rate,simple_type2_rate];
     dbg_str = sprintf('Simple #Type 1 error = %d, #Type 2 error = %d',sum(simple_errors == 1),sum(simple_errors == 2));
     dbg_print(dbg_str,DEBUG);
@@ -389,12 +407,6 @@ for i = 1:1:Trials
     
     %number of measurements each channel k has recieved
     Trial_tree_m_k = zeros(1,K);
-        
-    %Simple scheme estimate of p_k
-    Trial_tree_hat_p_k = zeros(1,K);
-    
-    %bins for the simple scheme
-    Trial_tree_bin_hat_p = zeros(1,K);
     
     %slack factor - number of ones we are willing to miss
     slack = 0.25;
@@ -464,7 +476,7 @@ for i = 1:1:Trials
             %Didn't find any thing worth picking, relax the criteria a bit.
             if sum(picked) == 0
                 slack = slack + 0.05;
-                sprintf('Bumped up the slack to %f', slack)
+    %            sprintf('Bumped up the slack to %f', slack)
                 continue;
             end
                         
@@ -488,22 +500,32 @@ for i = 1:1:Trials
     
     %% Tree Scheme Data Analysis
     
+    %Simple scheme estimate of p_k
+    Trial_tree_hat_p_k = zeros(1,K);
+    
     %computes the estimates of paramters for channels we have measrements for
     for k = 1:1:K
-        if Trial_tree_m_k(k) ~= 0
+        if Trial_tree_m_k(k) > 0
             Trial_tree_hat_p_k(k) = Trial_tree_d_k(k) / Trial_tree_m_k(k);
+        else
+            Trial_tree_hat_p_k(k) = -1;
         end
     end
-        
+    
+    %bins for the simple scheme
+    Trial_tree_bin_hat_p = zeros(1,K);
+    
     %bin the Estimates
     for k = 1:1:K
-        if Trial_tree_hat_p_k(k) > p_prime_rs
-            Trial_tree_bin_hat_p(k) = 3;
-        elseif Trial_tree_hat_p_k(k) < p_prime_ls
-            Trial_tree_bin_hat_p(k) = 1;
-        else
-            %if it was never measured, throw it in 2.
-            Trial_tree_bin_hat_p(k) = 2;
+        if Trial_tree_hat_p_k(k) ~= -1
+            if Trial_tree_hat_p_k(k) > p_prime_rs
+                Trial_tree_bin_hat_p(k) = 3;
+            elseif Trial_tree_hat_p_k(k) < p_prime_ls
+                Trial_tree_bin_hat_p(k) = 1;
+            else
+                %if it was never measured, throw it in 2.
+                Trial_tree_bin_hat_p(k) = 2;
+            end
         end
     end
     
@@ -512,7 +534,7 @@ for i = 1:1:Trials
     
     %Compare Bin Values
     for k = 1:1:K
-        if bin_p_act(k) ~= Trial_tree_bin_hat_p(k) && Trial_tree_m_k(k) ~= 0
+        if bin_p_act(k) ~= Trial_tree_bin_hat_p(k) && Trial_tree_m_k(k) > 0
 %            sprintf('Error Found, hat(p) = %f, p_act = %f, hat_bin = %d, act_bin = %d',Trial_simple_hat_p_k(k), p_act(k), Trial_simple_bin_hat_p(k), bin_p_act(k))
 %            sprintf('d_k = %d, m_k = %d, k = %d',Trial_simple_d_k(k),Trial_simple_m_k(k),k)
             if bin_p_act(k) == 2
@@ -524,23 +546,23 @@ for i = 1:1:Trials
             end
         end
     end
-  
-    
     
     %number of channels with a significant measurement
     Trial_tree_significant_measured = length(Trial_tree_m_k(Trial_tree_m_k > pass_sample));
-    dbg_str = sprintf('Number of channels with significant= %d', Trial_tree_significant_measured );
+    dbg_str = sprintf('Number of channels deemed significant= %d', Trial_tree_significant_measured );
     dbg_print(dbg_str,DEBUG);
     
-    Trial_tree_measured = length(Trial_tree_m_k(Trial_tree_m_k > 0));
-    dbg_str = sprintf('Number of measured channels = %d', Trial_tree_measured );
+    %Number of channels placed in outer bins
+    Trial_tree_outer_bins = sum(Trial_tree_bin_hat_p == 3) + sum(Trial_tree_bin_hat_p == 1);
+    dbg_str = sprintf('Tree: Number of channels in the outer bins = %d', Trial_tree_outer_bins );
     dbg_print(dbg_str,DEBUG);
     
     %compute error rates as number of mistakes divided by number classified
-    tree_type1_rate = sum(tree_errors == 1) / Trial_tree_measured;
-    tree_type2_rate = sum(tree_errors == 2) / Trial_tree_measured;
+    tree_type1_rate = sum(tree_errors == 1) / max(Trial_tree_significant_measured - Trial_tree_outer_bins,1);
+    tree_type2_rate = sum(tree_errors == 2) / Trial_tree_outer_bins;
     
     %Store and report Error Rate
+    Data_Tree_Significant(i) = Trial_tree_significant_measured;
     Data_Tree_error(i,:) = [tree_type1_rate,tree_type2_rate];
     dbg_str = sprintf('Tree #Type 1 error = %d, #Type 2 error = %d',sum(tree_errors == 1),sum(tree_errors == 2));
     dbg_print(dbg_str,DEBUG);
@@ -557,10 +579,10 @@ for i = 1:1:Trials
     %% Sanity Diagonsitc output
     if DEBUG
 %         sprintf('Bins')
-%         bin_p_act
-%         Trial_SPRT_decision
-%         Trial_simple_bin_hat_p
-%         Trial_tree_bin_hat_p
+         bin_p_act
+         Trial_SPRT_decision
+         Trial_simple_bin_hat_p
+         Trial_tree_bin_hat_p
 %         
 %         sprintf('Estimates')
          p_act
@@ -568,9 +590,9 @@ for i = 1:1:Trials
 %         Trial_simple_hat_p_k
 %        Trial_simple_d_k
 %        Trial_simple_m_k
-        Trial_tree_hat_p_k
-        Trial_tree_d_k
-        Trial_tree_m_k
+%        Trial_tree_hat_p_k
+%        Trial_tree_d_k
+%        Trial_tree_m_k
     end
         
     %% End Trial

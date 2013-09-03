@@ -2,6 +2,8 @@
 
 %% Paths and local functions
 
+matlabpool open;
+
 %for use during cmd line run in linux
 %addpath '../lib'
 
@@ -14,10 +16,10 @@ DEBUG = false;
 deadline = 1000;
 
 %number of Trials to test
-Trials = 5;
+Trials = 10;
 
 %Number of Channels to test aganst
-Channels = 5:5:80;
+Channels = 5:10:20;
 
 %number of good channels we want to dig out (a preformance threhold)
 good = 4;
@@ -124,7 +126,7 @@ Data_Tree_mean_m_k = zeros(length(Channels),Trials);
 for chan_num_ind = 1:1:length(Channels)
     K = Channels(chan_num_ind);
     sprintf('On channel set %d',K)
-    for i = 1:1:Trials
+    parfor i = 1:Trials
         
         %% cheap progress indicator
         sprintf('On trail %d',i)
@@ -288,7 +290,7 @@ for chan_num_ind = 1:1:length(Channels)
         
         %compute error rates as number of mistakes divided by number classified
         sprt_type1_rate = sum(sprt_errors == 1) / max(Data_SPRT_Significant(chan_num_ind,i) - Trial_SPRT_outer_bins, 1);
-        sprt_type2_rate = sum(sprt_errors == 2) / Trial_SPRT_outer_bins;
+        sprt_type2_rate = sum(sprt_errors == 2) / max(Trial_SPRT_outer_bins,1);
         
         %Store and Report error rates
         Data_SPRT_error_1(chan_num_ind,i) = sprt_type1_rate;
@@ -389,7 +391,7 @@ for chan_num_ind = 1:1:length(Channels)
         
         %compute error rates as number of mistakes divided by number classified
         simple_type1_rate = sum(simple_errors == 1) / max(Trial_simple_measured - Trial_simple_outer_bins,1);
-        simple_type2_rate = sum(simple_errors == 2) / Trial_simple_outer_bins;
+        simple_type2_rate = sum(simple_errors == 2) / max(Trial_simple_outer_bins,1);
         
         %Store and report Error Rate
         Data_Simple_Significant(chan_num_ind,i) = Trial_simple_measured;
@@ -513,7 +515,7 @@ for chan_num_ind = 1:1:length(Channels)
         
         %computes the estimates of paramters for channels we have measrements for
         for k = 1:1:K
-            if Trial_tree_m_k(k) > pass_sample
+            if Trial_tree_m_k(k) > 0
                 Trial_tree_hat_p_k(k) = Trial_tree_d_k(k) / Trial_tree_m_k(k);
             else
                 Trial_tree_hat_p_k(k) = -1;
@@ -542,7 +544,7 @@ for chan_num_ind = 1:1:length(Channels)
         
         %Compare Bin Values
         for k = 1:1:K
-            if bin_p_act(k) ~= Trial_tree_bin_hat_p(k) && Trial_tree_m_k(k) > pass_sample
+            if bin_p_act(k) ~= Trial_tree_bin_hat_p(k) && Trial_tree_m_k(k) > 0
                 %            sprintf('Error Found, hat(p) = %f, p_act = %f, hat_bin = %d, act_bin = %d',Trial_simple_hat_p_k(k), p_act(k), Trial_simple_bin_hat_p(k), bin_p_act(k))
                 %            sprintf('d_k = %d, m_k = %d, k = %d',Trial_simple_d_k(k),Trial_simple_m_k(k),k)
                 if bin_p_act(k) == 2
@@ -567,7 +569,7 @@ for chan_num_ind = 1:1:length(Channels)
         
         %compute error rates as number of mistakes divided by number classified
         tree_type1_rate = sum(tree_errors == 1) / max(Trial_tree_significant_measured - Trial_tree_outer_bins,1);
-        tree_type2_rate = sum(tree_errors == 2) / Trial_tree_outer_bins;
+        tree_type2_rate = sum(tree_errors == 2) / max(Trial_tree_outer_bins,1);
         
         %Store and report Error Rate
         Data_Tree_Significant(chan_num_ind,i) = Trial_tree_significant_measured;
@@ -588,13 +590,13 @@ for chan_num_ind = 1:1:length(Channels)
         %% Sanity Diagonsitc output
         if DEBUG
             %         sprintf('Bins')
-            bin_p_act
-            Trial_SPRT_decision
-            Trial_simple_bin_hat_p
-            Trial_tree_bin_hat_p
+           % bin_p_act
+           % Trial_SPRT_decision
+            %Trial_simple_bin_hat_p
+            %Trial_tree_bin_hat_p
             %
             %         sprintf('Estimates')
-            p_act
+           % p_act
             %         Trial_sprt_m_k
             %         Trial_simple_hat_p_k
             %        Trial_simple_d_k
@@ -608,5 +610,7 @@ for chan_num_ind = 1:1:length(Channels)
     end
 end
 %% Store the results for comparison
-fname = sprintf('Data3SchemeChanMultiChannelTrials%d.mat',Trials);
+matlabpool close;
+fname = sprintf('Data3SchemeTri%dmin%dmax%d.mat',Trials,min(Channels),max(Channels));
 save(fname);
+
