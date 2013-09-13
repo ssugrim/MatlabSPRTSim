@@ -19,8 +19,8 @@ deadline = 1000;
 Trials = 10;
 
 %Number of Channels to test aganst
-Channels = 5:10:20;
-
+Channels = 2.^(5:1:6);
+%Channels = [32];
 %number of good channels we want to dig out (a preformance threhold)
 good = 4;
 
@@ -100,6 +100,13 @@ Data_SPRT_error_2 = zeros(length(Channels),Trials);
 %Mean number of measurements per channel for SPRT
 Data_SPRT_mean_m_k = zeros(length(Channels),Trials);
 
+%Number in the bin 1 or 3
+Data_SPRT_bin_1 = zeros(length(Channels),Trials);
+Data_SPRT_bin_3 = zeros(length(Channels),Trials);
+
+%Mean estimated parameter in bin 1
+Data_SPRT_mean_p_hat_good = zeros(length(Channels),Trials);
+
 %Number of channels that were Significant to Simple  - At least one measurement
 Data_Simple_Significant = zeros(length(Channels),Trials);
 
@@ -109,6 +116,13 @@ Data_Simple_error_2 = zeros(length(Channels),Trials);
 
 %Mean number of measurements per channel for Simple
 Data_Simple_mean_m_k = zeros(length(Channels),Trials);
+
+%Number in the bin 1 or 3
+Data_Simple_bin_1 = zeros(length(Channels),Trials);
+Data_Simple_bin_3 = zeros(length(Channels),Trials);
+
+%Mean estimated parameter in bin 1
+Data_Simple_mean_p_hat_good = zeros(length(Channels),Trials);
 
 %Number of channels that were Significant to Tree  - More than one pass
 Data_Tree_Significant = zeros(length(Channels),Trials);
@@ -120,16 +134,30 @@ Data_Tree_error_2 = zeros(length(Channels),Trials);
 %Mean number of measurements per channel for TREE
 Data_Tree_mean_m_k = zeros(length(Channels),Trials);
 
+%Number in the bin 1 or 3
+Data_Tree_bin_1 = zeros(length(Channels),Trials);
+Data_Tree_bin_3 = zeros(length(Channels),Trials);
+
+%Mean estimated parameter in bin 1
+Data_Tree_mean_p_hat_good = zeros(length(Channels),Trials);
+
+sprt_beta_diff = zeros(length(Channels),Trials);
+simple_beta_diff = zeros(length(Channels),Trials);
+tree_beta_diff = zeros(length(Channels),Trials);
+
+
 %% Simulation Begins here 
 
 %%%% Begin Trial Loop (i is my trial index) %%%%
 for chan_num_ind = 1:1:length(Channels)
-    K = Channels(chan_num_ind);
+    K = Channels(chan_num_ind);   
     sprintf('On channel set %d',K)
     parfor i = 1:Trials
-        
+%for i = 1:Trials        
         %% cheap progress indicator
-        sprintf('On trail %d',i)
+        if (mod(i,25) == 0)
+            sprintf('On trail %d',i)
+        end
         
         %% TRIAL SETUP - Per trial computed vales
         
@@ -257,6 +285,11 @@ for chan_num_ind = 1:1:length(Channels)
         end
         
         %% SPRT data Analysis - Collecting error and decision information
+        
+        [a,b] = TrialAlphaBeta(K,bin_p_act,Trial_SPRT_decision);
+        dbg_str = sprintf('a= %f, b = %f',a,b);
+        dbg_print(dbg_str,DEBUG);
+        
         %number of channels completed for trial i
         Data_SPRT_Significant(chan_num_ind,i) =  sum(Trial_SPRT_decision > 0);
         dbg_str = sprintf('SPRT charaterized %d at deadline, they were:',Data_SPRT_Significant(chan_num_ind,i));
@@ -283,15 +316,26 @@ for chan_num_ind = 1:1:length(Channels)
             end
         end
         
+        Trial_SPRT_p_hat = zeros(1,K); 
+        %Compute mean p_hat
+        for k = 1:1:K
+            if Trial_sprt_m_k(k) ~= 0
+               Trial_SPRT_p_hat(k) =  Trial_sprt_d_k(k) / Trial_sprt_m_k(k);
+            end
+        end
+        Data_SPRT_mean_p_hat_good(chan_num_ind,i) = mean(Trial_SPRT_p_hat(Trial_SPRT_decision == 1));
+        
         %Compute the number of channels in the outer bins
-        Trial_SPRT_outer_bins = length(Trial_SPRT_decision(Trial_SPRT_decision == 3)) + length(Trial_SPRT_decision(Trial_SPRT_decision == 1));
+        Data_SPRT_bin_1(chan_num_ind,i) = sum(Trial_SPRT_decision == 1);
+        Data_SPRT_bin_3(chan_num_ind,i) = sum(Trial_SPRT_decision == 3);
+        Trial_SPRT_outer_bins = Data_SPRT_bin_1(chan_num_ind,i) + Data_SPRT_bin_3(chan_num_ind,i);
         dbg_str = sprintf('Number of SPRT channels in the outer bins = %d', Trial_SPRT_outer_bins );
         dbg_print(dbg_str,DEBUG);
         
         %compute error rates as number of mistakes divided by number classified
         sprt_type1_rate = sum(sprt_errors == 1) / max(Data_SPRT_Significant(chan_num_ind,i) - Trial_SPRT_outer_bins, 1);
         sprt_type2_rate = sum(sprt_errors == 2) / max(Trial_SPRT_outer_bins,1);
-        
+
         %Store and Report error rates
         Data_SPRT_error_1(chan_num_ind,i) = sprt_type1_rate;
         Data_SPRT_error_2(chan_num_ind,i) = sprt_type2_rate;
@@ -308,6 +352,8 @@ for chan_num_ind = 1:1:length(Channels)
         %how long did it take to find 4 good ones.
         Data_good_decision_time(chan_num_ind,i) = max(Trial_good_decision);
         dbg_print('End SPRT',DEBUG);
+        
+        sprt_beta_diff(chan_num_ind,i) = sprt_type2_rate - b;
         
         %% Simple Scheme Initilization
         dbg_print('Start Simple',DEBUG);
@@ -341,6 +387,8 @@ for chan_num_ind = 1:1:length(Channels)
         
         %% Simple Scheme Data Analysis
         
+        
+        
         %computes the estimates we have measrements for
         for k = 1:1:K
             if Trial_simple_m_k(k) ~= 0
@@ -359,6 +407,10 @@ for chan_num_ind = 1:1:length(Channels)
                 Trial_simple_bin_hat_p(k) = 2;
             end
         end
+        
+        [a,b] = TrialAlphaBeta(K,bin_p_act,Trial_simple_bin_hat_p);
+        dbg_str = sprintf('a= %f, b = %f',a,b);
+        dbg_print(dbg_str,DEBUG);
         
         %Count the errors made
         simple_errors = zeros(1,K);
@@ -382,16 +434,23 @@ for chan_num_ind = 1:1:length(Channels)
         Trial_simple_measured = sum(Trial_simple_m_k > 0);
         dbg_str = sprintf('Number of measured channels = %d', Trial_simple_measured );
         dbg_print(dbg_str,DEBUG);
+
+        %Compute mean p_hat
+        Data_Simple_mean_p_hat_good(chan_num_ind,i) = mean(Trial_simple_hat_p_k(Trial_simple_bin_hat_p == 1));
         
-        %Number of channels placed in outer bins
-        Trial_simple_outer_bins = sum(Trial_simple_bin_hat_p == 3) + sum(Trial_simple_bin_hat_p == 1);
+        %Compute the number of channels in the outer bins
+        Data_Simple_bin_1(chan_num_ind,i) = sum(Trial_simple_bin_hat_p == 1);
+        Data_Simple_bin_3(chan_num_ind,i) = sum(Trial_simple_bin_hat_p == 3);
+        Trial_simple_outer_bins = Data_Simple_bin_1(chan_num_ind,i) + Data_Simple_bin_3(chan_num_ind,i);
         dbg_str = sprintf('Simple: Number of channels in the outer bins = %d', Trial_simple_outer_bins );
         dbg_print(dbg_str,DEBUG);
-        
-        
+
         %compute error rates as number of mistakes divided by number classified
         simple_type1_rate = sum(simple_errors == 1) / max(Trial_simple_measured - Trial_simple_outer_bins,1);
         simple_type2_rate = sum(simple_errors == 2) / max(Trial_simple_outer_bins,1);
+        
+        
+        
         
         %Store and report Error Rate
         Data_Simple_Significant(chan_num_ind,i) = Trial_simple_measured;
@@ -407,10 +466,15 @@ for chan_num_ind = 1:1:length(Channels)
         dbg_str = sprintf('Mean number of samples used = %f ',Data_Simple_mean_m_k(chan_num_ind,i));
         dbg_print(dbg_str,DEBUG);
         
+        simple_beta_diff(chan_num_ind,i) = simple_type2_rate - b;
+        
         dbg_print('End Simple',DEBUG);
         
         %% Tree Scheme Initilization
         dbg_print('Start Tree',DEBUG);
+        
+        %fraction of samples to keep in reserve for making decisons
+        reserve = 0.5;
         
         %running sum of ones
         Trial_tree_d_k = zeros(1,K);
@@ -431,50 +495,38 @@ for chan_num_ind = 1:1:length(Channels)
         %measurements per channel
         
         
-        %first pass m is my time index
-        if K > deadline
-            %if we have more channels than samples, just sample each channel
-            %the required ammount for one pass until we run out of samples
-            used =  1;
-            cur_index = 1;
-            while used < deadline + 1
-                for n = 1:1:pass_sample
-                    Trial_tree_d_k(cur_index) = Trial_tree_d_k(cur_index) + random('bino',1,p_act(cur_index));
-                    Trial_tree_m_k(cur_index) = Trial_tree_m_k(cur_index) + 1;
-                    used = used + 1;
-                end
-                cur_index = cur_index + 1;
+
+        %do a first pass with using up the ((1 - reserve) * limit)
+        %allotment
+        
+        used =  1;
+        allotment = floor(((1 - reserve) * deadline) / pass_sample);
+        
+        for k = 1:1:min(allotment,K)
+            for n = 1:1:pass_sample
+                Trial_tree_d_k(k) = Trial_tree_d_k(k) + random('bino',1,p_act(k));
+                Trial_tree_m_k(k) = Trial_tree_m_k(k) + 1;
+                used = used + 1;
             end
-        else
-            %Other wise we do a first pass, and give the required number of
-            %samples to each channel.
+        end
+        
+        %sprintf('Completed first pass, used = %d',used)
+        
+        %and now distribute measurements that are on the edges
+        cur_index = 1;
+        pass = 0;
+        while used < deadline + 1
+            %relaxed too much I must be done (have to let it get past .5
+            %otherwise we miss some channels even though we have
+            %measurements
+            if slack > 0.6
+                break;
+            end
             
-            used =  1;
+            picked = zeros(1,K);
+            %pick a set of channels
             for k = 1:1:K
-                for n = 1:1:pass_sample
-                    Trial_tree_d_k(k) = Trial_tree_d_k(k) + random('bino',1,p_act(k));
-                    Trial_tree_m_k(k) = Trial_tree_m_k(k) + 1;
-                    used = used + 1;
-                end
-            end
-            
-            %       sprintf('Completed first pass, used = %d',used)
-            cur_index = 1;
-            pass = 0;
-            
-            %and now distribute measurements that are on the edges
-            while used < deadline + 1
-                
-                %relaxed too much I must be done (have to let it get past .5
-                %otherwise we miss some channels even though we have
-                %measurements
-                if slack > 0.6
-                    break;
-                end
-                
-                picked = zeros(1,K);
-                %pick a set of channels
-                for k = 1:1:K
+                if Trial_tree_m_k(k) > 0
                     ratio = Trial_tree_d_k(k) / Trial_tree_m_k(k);
                     % parameters are within some bound and the channels haven't
                     % passed some sane limit
@@ -482,40 +534,42 @@ for chan_num_ind = 1:1:length(Channels)
                         picked(k) = 1;
                     end
                 end
-                
-                %Didn't find any thing worth picking, relax the criteria a bit.
-                if sum(picked) == 0
-                    slack = slack + 0.05;
-                    %            sprintf('Bumped up the slack to %f', slack)
-                    continue;
-                end
-                
-                %           sprintf('Pass = %d, # picked = %d',pass, length(picked(picked > 0)))
-                
-                %distribute measurements to the picks
-                for k = 1:1:K
-                    if picked(k) ~= 0
-                        for n = 1:1:pass_sample
-                            Trial_tree_d_k(k) = Trial_tree_d_k(k) + random('bino',1,p_act(k));
-                            Trial_tree_m_k(k) = Trial_tree_m_k(k) + 1;
-                            used = used + 1;
-                        end
+            end
+            
+            %Didn't find any thing worth picking, relax the criteria a bit.
+            if sum(picked) == 0
+                slack = slack + 0.05;
+                %sprintf('Bumped up the slack to %f', slack)
+                continue;
+            end
+            
+            %sprintf('Pass = %d, # picked = %d',pass, length(picked(picked > 0)))
+            
+            %distribute measurements to the picks
+            for k = 1:1:K
+                if picked(k) ~= 0
+                    for n = 1:1:pass_sample
+                        Trial_tree_d_k(k) = Trial_tree_d_k(k) + random('bino',1,p_act(k));
+                        Trial_tree_m_k(k) = Trial_tree_m_k(k) + 1;
+                        used = used + 1;
                     end
                 end
-                
-                %didn't use any measurements so I must be done
-                pass = pass + 1;
             end
+            
+            %didn't use any measurements so I must be done
+            pass = pass + 1;
         end
         
         %% Tree Scheme Data Analysis
+        
+        
         
         %Simple scheme estimate of p_k
         Trial_tree_hat_p_k = zeros(1,K);
         
         %computes the estimates of paramters for channels we have measrements for
         for k = 1:1:K
-            if Trial_tree_m_k(k) > 0
+            if Trial_tree_m_k(k) > pass_sample
                 Trial_tree_hat_p_k(k) = Trial_tree_d_k(k) / Trial_tree_m_k(k);
             else
                 Trial_tree_hat_p_k(k) = -1;
@@ -539,20 +593,29 @@ for chan_num_ind = 1:1:length(Channels)
             end
         end
         
+        %function of data analysis
+        [a,b] = TrialAlphaBeta(K,bin_p_act, Trial_tree_bin_hat_p);
+        dbg_str = sprintf('a= %f, b = %f',a,b);
+        dbg_print(dbg_str,DEBUG);
+        
+        
         %Count the errors made
         tree_errors = zeros(1,K);
         
         %Compare Bin Values
         for k = 1:1:K
-            if bin_p_act(k) ~= Trial_tree_bin_hat_p(k) && Trial_tree_m_k(k) > 0
-                %            sprintf('Error Found, hat(p) = %f, p_act = %f, hat_bin = %d, act_bin = %d',Trial_simple_hat_p_k(k), p_act(k), Trial_simple_bin_hat_p(k), bin_p_act(k))
-                %            sprintf('d_k = %d, m_k = %d, k = %d',Trial_simple_d_k(k),Trial_simple_m_k(k),k)
-                if bin_p_act(k) == 2
-                    %if the proper bin was 2, and we did not say 2, that is a type 2 error
-                    tree_errors(k)=2;
-                else
-                    %other wise it was a type 1 error (False rejection of null %hypothesis)
-                    tree_errors(k)=1;
+            if Trial_tree_bin_hat_p(k) ~= 0
+                if bin_p_act(k) ~= Trial_tree_bin_hat_p(k)
+                    %&& Trial_tree_m_k(k) > pass_sample
+                    %            sprintf('Error Found, hat(p) = %f, p_act = %f, hat_bin = %d, act_bin = %d',Trial_simple_hat_p_k(k), p_act(k), Trial_simple_bin_hat_p(k), bin_p_act(k))
+                    %            sprintf('d_k = %d, m_k = %d, k = %d',Trial_simple_d_k(k),Trial_simple_m_k(k),k)
+                    if bin_p_act(k) == 2
+                        %if the proper bin was 2, and we did not say 2, that is a type 2 error
+                        tree_errors(k)=2;
+                    else
+                        %other wise it was a type 1 error (False rejection of null %hypothesis)
+                        tree_errors(k)=1;
+                    end
                 end
             end
         end
@@ -562,8 +625,13 @@ for chan_num_ind = 1:1:length(Channels)
         dbg_str = sprintf('Number of channels with significant= %d', Trial_tree_significant_measured );
         dbg_print(dbg_str,DEBUG);
         
-        %Number of channels placed in outer bins
-        Trial_tree_outer_bins = sum(Trial_tree_bin_hat_p == 3) + sum(Trial_tree_bin_hat_p == 1);
+        %Compute mean p_hat
+        Data_Tree_mean_p_hat_good(chan_num_ind,i) = mean(Trial_tree_hat_p_k(Trial_tree_bin_hat_p == 1));
+        
+        %Compute the number of channels in the outer bins
+        Data_Tree_bin_1(chan_num_ind,i) = sum(Trial_tree_bin_hat_p == 1);
+        Data_Tree_bin_3(chan_num_ind,i) = sum(Trial_tree_bin_hat_p == 3);
+        Trial_tree_outer_bins = Data_Tree_bin_1(chan_num_ind,i) + Data_Tree_bin_3(chan_num_ind,i);
         dbg_str = sprintf('Tree: Number of channels in the outer bins = %d', Trial_tree_outer_bins );
         dbg_print(dbg_str,DEBUG);
         
@@ -585,9 +653,11 @@ for chan_num_ind = 1:1:length(Channels)
         dbg_str = sprintf('Mean number of samples used = %f ',Data_Tree_mean_m_k(chan_num_ind,i));
         dbg_print(dbg_str,DEBUG);
         
+        tree_beta_diff(chan_num_ind,i) = tree_type2_rate - b;
+        
         dbg_print('End Tree',DEBUG);
         
-        %% Sanity Diagonsitc output
+        %% Sanity Diagonstic output
         if DEBUG
             %         sprintf('Bins')
            % bin_p_act
