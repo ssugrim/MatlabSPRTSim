@@ -16,10 +16,13 @@ DEBUG = false;
 deadline = 1000;
 
 %number of Trials to test
-Trials = 10;
+Trials = 500;
+
+%Histogram bins
+Histo_bin = 0:1:30;
 
 %Number of Channels to test aganst
-Channels = 2.^(5:1:6);
+Channels = (2^10);
 %Channels = [32];
 %number of good channels we want to dig out (a preformance threhold)
 good = 4;
@@ -90,6 +93,8 @@ Data_good_decision_time = zeros(length(Channels),Trials);
 %Number of good channels available
 Data_good_available = zeros(length(Channels),Trials);
 
+%% SPRT Data
+
 %Number of channels that were Significant to SPRT  - completed to a decision
 Data_SPRT_Significant = zeros(length(Channels),Trials);
 
@@ -100,12 +105,13 @@ Data_SPRT_error_2 = zeros(length(Channels),Trials);
 %Mean number of measurements per channel for SPRT
 Data_SPRT_mean_m_k = zeros(length(Channels),Trials);
 
-%Number in the bin 1 or 3
-Data_SPRT_bin_1 = zeros(length(Channels),Trials);
-Data_SPRT_bin_3 = zeros(length(Channels),Trials);
+% Percent Classified by SPRT
+Data_SPRT_percent_classified = zeros(length(Channels),Trials);
 
-%Mean estimated parameter in bin 1
-Data_SPRT_mean_p_hat_good = zeros(length(Channels),Trials);
+%SPRT allocation histogram
+Data_SPRT_histogram = zeros(length(Channels),Trials,length(Histo_bin));
+
+%% Simple Data
 
 %Number of channels that were Significant to Simple  - At least one measurement
 Data_Simple_Significant = zeros(length(Channels),Trials);
@@ -117,12 +123,13 @@ Data_Simple_error_2 = zeros(length(Channels),Trials);
 %Mean number of measurements per channel for Simple
 Data_Simple_mean_m_k = zeros(length(Channels),Trials);
 
-%Number in the bin 1 or 3
-Data_Simple_bin_1 = zeros(length(Channels),Trials);
-Data_Simple_bin_3 = zeros(length(Channels),Trials);
+% Percent Classified by Simple
+Data_Simple_percent_classified = zeros(length(Channels),Trials);
 
-%Mean estimated parameter in bin 1
-Data_Simple_mean_p_hat_good = zeros(length(Channels),Trials);
+%Simple allocation histogram
+Data_Simple_histogram = zeros(length(Channels),Trials,length(Histo_bin));
+
+%% Tree Data
 
 %Number of channels that were Significant to Tree  - More than one pass
 Data_Tree_Significant = zeros(length(Channels),Trials);
@@ -134,17 +141,11 @@ Data_Tree_error_2 = zeros(length(Channels),Trials);
 %Mean number of measurements per channel for TREE
 Data_Tree_mean_m_k = zeros(length(Channels),Trials);
 
-%Number in the bin 1 or 3
-Data_Tree_bin_1 = zeros(length(Channels),Trials);
-Data_Tree_bin_3 = zeros(length(Channels),Trials);
+% Percent Classified by Simple
+Data_Tree_percent_classified = zeros(length(Channels),Trials);
 
-%Mean estimated parameter in bin 1
-Data_Tree_mean_p_hat_good = zeros(length(Channels),Trials);
-
-sprt_beta_diff = zeros(length(Channels),Trials);
-simple_beta_diff = zeros(length(Channels),Trials);
-tree_beta_diff = zeros(length(Channels),Trials);
-
+%Simple allocation histogram
+Data_Tree_histogram = zeros(length(Channels),Trials,length(Histo_bin));
 
 %% Simulation Begins here 
 
@@ -153,7 +154,6 @@ for chan_num_ind = 1:1:length(Channels)
     K = Channels(chan_num_ind);   
     sprintf('On channel set %d',K)
     parfor i = 1:Trials
-%for i = 1:Trials        
         %% cheap progress indicator
         if (mod(i,25) == 0)
             sprintf('On trail %d',i)
@@ -286,8 +286,9 @@ for chan_num_ind = 1:1:length(Channels)
         
         %% SPRT data Analysis - Collecting error and decision information
         
-        [a,b] = TrialAlphaBeta(K,bin_p_act,Trial_SPRT_decision);
-        dbg_str = sprintf('a= %f, b = %f',a,b);
+        % Use the bins to compute the error rates
+        [Data_SPRT_error_1(chan_num_ind,i),Data_SPRT_error_2(chan_num_ind,i)] = TrialAlphaBeta(K,bin_p_act,Trial_SPRT_decision);
+        dbg_str = sprintf('Trial SPRT error rates are alpha = %f, beta = %f ',Data_SPRT_error_1(chan_num_ind,i),Data_SPRT_error_2(chan_num_ind,i));
         dbg_print(dbg_str,DEBUG);
         
         %number of channels completed for trial i
@@ -295,66 +296,35 @@ for chan_num_ind = 1:1:length(Channels)
         dbg_str = sprintf('SPRT charaterized %d at deadline, they were:',Data_SPRT_Significant(chan_num_ind,i));
         dbg_print(dbg_str,DEBUG);
         
-        %Daignostic Display
-        %  p_act(Trial_SPRT_decision > 0)
-        
-        %determining all the errors that happened upto the deadline
-        
-        %Per trial vectors of errors, non zero value means an error occured at that channel index.
-        sprt_errors = zeros(1,K);
-        
-        %Compare Bin Values
-        for k = 1:1:K
-            if bin_p_act(k) ~= Trial_SPRT_decision(k) && Trial_SPRT_decision(k) ~= 0
-                if bin_p_act(k) == 2
-                    %if the proper bin was 2, and we did not say 2, that is a type 2 error
-                    sprt_errors(k)=2;
-                else
-                    %other wise it was a type 1 error (False rejection of null %hypothesis)
-                    sprt_errors(k)=1;
-                end
-            end
-        end
+        % Percent Classified by SPRT
+        Data_SPRT_percent_classified(chan_num_ind,i) = Data_SPRT_Significant(chan_num_ind,i) / K;
         
         Trial_SPRT_p_hat = zeros(1,K); 
         %Compute mean p_hat
         for k = 1:1:K
             if Trial_sprt_m_k(k) ~= 0
-               Trial_SPRT_p_hat(k) =  Trial_sprt_d_k(k) / Trial_sprt_m_k(k);
+               Trial_SPRT_p_hat(k) =  Trial_sprt_d_k(k) / (k);
             end
         end
+        
         Data_SPRT_mean_p_hat_good(chan_num_ind,i) = mean(Trial_SPRT_p_hat(Trial_SPRT_decision == 1));
         
-        %Compute the number of channels in the outer bins
-        Data_SPRT_bin_1(chan_num_ind,i) = sum(Trial_SPRT_decision == 1);
-        Data_SPRT_bin_3(chan_num_ind,i) = sum(Trial_SPRT_decision == 3);
-        Trial_SPRT_outer_bins = Data_SPRT_bin_1(chan_num_ind,i) + Data_SPRT_bin_3(chan_num_ind,i);
-        dbg_str = sprintf('Number of SPRT channels in the outer bins = %d', Trial_SPRT_outer_bins );
-        dbg_print(dbg_str,DEBUG);
-        
-        %compute error rates as number of mistakes divided by number classified
-        sprt_type1_rate = sum(sprt_errors == 1) / max(Data_SPRT_Significant(chan_num_ind,i) - Trial_SPRT_outer_bins, 1);
-        sprt_type2_rate = sum(sprt_errors == 2) / max(Trial_SPRT_outer_bins,1);
-
-        %Store and Report error rates
-        Data_SPRT_error_1(chan_num_ind,i) = sprt_type1_rate;
-        Data_SPRT_error_2(chan_num_ind,i) = sprt_type2_rate;
-        dbg_str = sprintf('SPRT #Type 1 error = %d, #Type 2 error = %d',sum(sprt_errors == 1),sum(sprt_errors == 2));
-        dbg_print(dbg_str,DEBUG);
-        dbg_str = sprintf('Trial SPRT error rates are alpha = %f, beta = %f ',Data_SPRT_error_1(chan_num_ind,i),Data_SPRT_error_2(chan_num_ind,i));
-        dbg_print(dbg_str,DEBUG);
-        
         %Store and report Mean number of samples used
-        Data_SPRT_mean_m_k(chan_num_ind,i) = mean(Trial_sprt_m_k(Trial_sprt_m_k > 0));
+        
+        %Mean across all channels (including the zeros) Cuz they don't
+        %understand what mean across measured means
+        Data_SPRT_mean_m_k(chan_num_ind,i) = mean(Trial_sprt_m_k);
         dbg_str = sprintf('Mean number of samples used = %f ',Data_SPRT_mean_m_k(chan_num_ind,i));
         dbg_print(dbg_str,DEBUG);
         
         %how long did it take to find 4 good ones.
         Data_good_decision_time(chan_num_ind,i) = max(Trial_good_decision);
+        
+        %compute the SPRT histogram
+        Data_SPRT_histogram(chan_num_ind,i,:) = TrialHistogram(Trial_sprt_m_k,Histo_bin);
+        
         dbg_print('End SPRT',DEBUG);
-        
-        sprt_beta_diff(chan_num_ind,i) = sprt_type2_rate - b;
-        
+                      
         %% Simple Scheme Initilization
         dbg_print('Start Simple',DEBUG);
         
@@ -387,8 +357,6 @@ for chan_num_ind = 1:1:length(Channels)
         
         %% Simple Scheme Data Analysis
         
-        
-        
         %computes the estimates we have measrements for
         for k = 1:1:K
             if Trial_simple_m_k(k) ~= 0
@@ -408,66 +376,30 @@ for chan_num_ind = 1:1:length(Channels)
             end
         end
         
-        [a,b] = TrialAlphaBeta(K,bin_p_act,Trial_simple_bin_hat_p);
-        dbg_str = sprintf('a= %f, b = %f',a,b);
-        dbg_print(dbg_str,DEBUG);
-        
-        %Count the errors made
-        simple_errors = zeros(1,K);
-        
-        %Compare Bin Values
-        for k = 1:1:K
-            if bin_p_act(k) ~= Trial_simple_bin_hat_p(k) && Trial_simple_m_k(k) ~= 0
-                %            sprintf('Error Found, hat(p) = %f, p_act = %f, hat_bin = %d, act_bin = %d',Trial_simple_hat_p_k(k), p_act(k), Trial_simple_bin_hat_p(k), bin_p_act(k))
-                %            sprintf('d_k = %d, m_k = %d, k = %d',Trial_simple_d_k(k),Trial_simple_m_k(k),k)
-                if bin_p_act(k) == 2
-                    %if the proper bin was 2, and we did not say 2, that is a type 2 error
-                    simple_errors(k)=2;
-                else
-                    %other wise it was a type 1 error (False rejection of null %hypothesis)
-                    simple_errors(k)=1;
-                end
-            end
-        end
-        
-        %number of channels with a measurement
-        Trial_simple_measured = sum(Trial_simple_m_k > 0);
-        dbg_str = sprintf('Number of measured channels = %d', Trial_simple_measured );
-        dbg_print(dbg_str,DEBUG);
-
-        %Compute mean p_hat
-        Data_Simple_mean_p_hat_good(chan_num_ind,i) = mean(Trial_simple_hat_p_k(Trial_simple_bin_hat_p == 1));
-        
-        %Compute the number of channels in the outer bins
-        Data_Simple_bin_1(chan_num_ind,i) = sum(Trial_simple_bin_hat_p == 1);
-        Data_Simple_bin_3(chan_num_ind,i) = sum(Trial_simple_bin_hat_p == 3);
-        Trial_simple_outer_bins = Data_Simple_bin_1(chan_num_ind,i) + Data_Simple_bin_3(chan_num_ind,i);
-        dbg_str = sprintf('Simple: Number of channels in the outer bins = %d', Trial_simple_outer_bins );
-        dbg_print(dbg_str,DEBUG);
-
-        %compute error rates as number of mistakes divided by number classified
-        simple_type1_rate = sum(simple_errors == 1) / max(Trial_simple_measured - Trial_simple_outer_bins,1);
-        simple_type2_rate = sum(simple_errors == 2) / max(Trial_simple_outer_bins,1);
-        
-        
-        
-        
-        %Store and report Error Rate
-        Data_Simple_Significant(chan_num_ind,i) = Trial_simple_measured;
-        Data_Simple_error_1(chan_num_ind,i) = simple_type1_rate;
-        Data_Simple_error_2(chan_num_ind,i) = simple_type2_rate;
-        dbg_str = sprintf('Simple #Type 1 error = %d, #Type 2 error = %d',sum(simple_errors == 1),sum(simple_errors == 2));
-        dbg_print(dbg_str,DEBUG);
+        %Use the bins to compute the error rates
+        [Data_Simple_error_1(chan_num_ind,i),Data_Simple_error_2(chan_num_ind,i)] = TrialAlphaBeta(K,bin_p_act,Trial_simple_bin_hat_p);
         dbg_str = sprintf('Trial Simple error rates are alpha = %f, beta = %f ',Data_Simple_error_1(chan_num_ind,i),Data_Simple_error_2(chan_num_ind,i));
         dbg_print(dbg_str,DEBUG);
         
+        %Number of signifcant channels
+        Data_Simple_Significant(chan_num_ind,i) = sum(Trial_simple_m_k > 0);
+        dbg_str = sprintf('Number of measured channels = %d', Data_Simple_Significant(chan_num_ind,i));
+        dbg_print(dbg_str,DEBUG);
+        
+        % Percent Classified by SPRT
+        Data_Simple_percent_classified(chan_num_ind,i) = Data_Simple_Significant(chan_num_ind,i) / K;
+        
+        %Compute mean p_hat
+        Data_Simple_mean_p_hat_good(chan_num_ind,i) = mean(Trial_simple_hat_p_k(Trial_simple_bin_hat_p == 1));
+                
         %Store and report Mean number of samples used
-        Data_Simple_mean_m_k(chan_num_ind,i) = mean(Trial_simple_m_k(Trial_simple_m_k > 0));
+        Data_Simple_mean_m_k(chan_num_ind,i) = mean(Trial_simple_m_k);
         dbg_str = sprintf('Mean number of samples used = %f ',Data_Simple_mean_m_k(chan_num_ind,i));
         dbg_print(dbg_str,DEBUG);
         
-        simple_beta_diff(chan_num_ind,i) = simple_type2_rate - b;
-        
+        %compute the Simple histogram
+        Data_Simple_histogram(chan_num_ind,i,:) = TrialHistogram(Trial_simple_m_k,Histo_bin);
+                
         dbg_print('End Simple',DEBUG);
         
         %% Tree Scheme Initilization
@@ -562,8 +494,6 @@ for chan_num_ind = 1:1:length(Channels)
         
         %% Tree Scheme Data Analysis
         
-        
-        
         %Simple scheme estimate of p_k
         Trial_tree_hat_p_k = zeros(1,K);
         
@@ -593,68 +523,27 @@ for chan_num_ind = 1:1:length(Channels)
             end
         end
         
-        %function of data analysis
-        [a,b] = TrialAlphaBeta(K,bin_p_act, Trial_tree_bin_hat_p);
-        dbg_str = sprintf('a= %f, b = %f',a,b);
-        dbg_print(dbg_str,DEBUG);
-        
-        
-        %Count the errors made
-        tree_errors = zeros(1,K);
-        
-        %Compare Bin Values
-        for k = 1:1:K
-            if Trial_tree_bin_hat_p(k) ~= 0
-                if bin_p_act(k) ~= Trial_tree_bin_hat_p(k)
-                    %&& Trial_tree_m_k(k) > pass_sample
-                    %            sprintf('Error Found, hat(p) = %f, p_act = %f, hat_bin = %d, act_bin = %d',Trial_simple_hat_p_k(k), p_act(k), Trial_simple_bin_hat_p(k), bin_p_act(k))
-                    %            sprintf('d_k = %d, m_k = %d, k = %d',Trial_simple_d_k(k),Trial_simple_m_k(k),k)
-                    if bin_p_act(k) == 2
-                        %if the proper bin was 2, and we did not say 2, that is a type 2 error
-                        tree_errors(k)=2;
-                    else
-                        %other wise it was a type 1 error (False rejection of null %hypothesis)
-                        tree_errors(k)=1;
-                    end
-                end
-            end
-        end
-        
-        %number of channels with a significant measurement
-        Trial_tree_significant_measured = length(Trial_tree_m_k(Trial_tree_m_k > pass_sample));
-        dbg_str = sprintf('Number of channels with significant= %d', Trial_tree_significant_measured );
-        dbg_print(dbg_str,DEBUG);
-        
-        %Compute mean p_hat
-        Data_Tree_mean_p_hat_good(chan_num_ind,i) = mean(Trial_tree_hat_p_k(Trial_tree_bin_hat_p == 1));
-        
-        %Compute the number of channels in the outer bins
-        Data_Tree_bin_1(chan_num_ind,i) = sum(Trial_tree_bin_hat_p == 1);
-        Data_Tree_bin_3(chan_num_ind,i) = sum(Trial_tree_bin_hat_p == 3);
-        Trial_tree_outer_bins = Data_Tree_bin_1(chan_num_ind,i) + Data_Tree_bin_3(chan_num_ind,i);
-        dbg_str = sprintf('Tree: Number of channels in the outer bins = %d', Trial_tree_outer_bins );
-        dbg_print(dbg_str,DEBUG);
-        
-        %compute error rates as number of mistakes divided by number classified
-        tree_type1_rate = sum(tree_errors == 1) / max(Trial_tree_significant_measured - Trial_tree_outer_bins,1);
-        tree_type2_rate = sum(tree_errors == 2) / max(Trial_tree_outer_bins,1);
-        
-        %Store and report Error Rate
-        Data_Tree_Significant(chan_num_ind,i) = Trial_tree_significant_measured;
-        Data_Tree_error_1(chan_num_ind,i) = tree_type1_rate;
-        Data_Tree_error_2(chan_num_ind,i) = tree_type2_rate;
-        dbg_str = sprintf('Tree #Type 1 error = %d, #Type 2 error = %d',sum(tree_errors == 1),sum(tree_errors == 2));
-        dbg_print(dbg_str,DEBUG);
+        %Use the bins to compute the error rate
+        [Data_Tree_error_1(chan_num_ind,i),Data_Tree_error_2(chan_num_ind,i)] = TrialAlphaBeta(K,bin_p_act, Trial_tree_bin_hat_p);
         dbg_str = sprintf('Trial Tree error rates are alpha = %f, beta = %f ',Data_Tree_error_1(chan_num_ind,i),Data_Tree_error_2(chan_num_ind,i));
         dbg_print(dbg_str,DEBUG);
         
+        %number of channels with a significant measurement
+        Data_Tree_Significant(chan_num_ind,i) = length(Trial_tree_m_k(Trial_tree_m_k > pass_sample));
+        dbg_str = sprintf('Number of channels with significant= %d', Data_Tree_Significant(chan_num_ind,i) );
+        dbg_print(dbg_str,DEBUG);
+        
+        % Percent Classified by SPRT
+        Data_Tree_percent_classified(chan_num_ind,i) = Data_Tree_Significant(chan_num_ind,i) / K;
+           
         %Store and report Mean number of samples used
-        Data_Tree_mean_m_k(chan_num_ind,i) = mean(Trial_tree_m_k(Trial_tree_m_k > 0));
+        Data_Tree_mean_m_k(chan_num_ind,i) = mean(Trial_tree_m_k);
         dbg_str = sprintf('Mean number of samples used = %f ',Data_Tree_mean_m_k(chan_num_ind,i));
         dbg_print(dbg_str,DEBUG);
         
-        tree_beta_diff(chan_num_ind,i) = tree_type2_rate - b;
-        
+        %compute the Tree histogram
+        Data_Tree_histogram(chan_num_ind,i,:) = TrialHistogram(Trial_tree_m_k,Histo_bin);
+       
         dbg_print('End Tree',DEBUG);
         
         %% Sanity Diagonstic output

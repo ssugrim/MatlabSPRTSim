@@ -1,2 +1,2 @@
 #!/bin/bash
-/usr/bin/matlab -nodesktop -nodisplay -nojvm < $1 
+/usr/bin/matlab -nodesktop -nosplash < $1 
