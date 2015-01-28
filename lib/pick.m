@@ -1,11 +1,7 @@
 function [ res ] = pick(vec)
-%Pick's the lowest value of a Nx1 matrix, if equal pick randomly. 
-%Returns index
-if all(vec == min(vec))
-    res = randi(length(vec),1,1);
-else
-    res = min(find(vec == min(vec)));
-end
-
+%Randomly picks one of the lowest values of vector. Returns the index of
+%that value.
+first = find(vec == min(vec),1,'first');
+res = first + floor(random('unif',0,length(find(vec == min(vec)))));
 end
 

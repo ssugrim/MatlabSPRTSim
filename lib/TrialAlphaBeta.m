@@ -42,9 +42,19 @@ end
 outer_bins = sum(bin_k == 1) + sum(bin_k == 3);
 measured = sum(bin_k ~= 0);
 
-%error rate for those that were measured
-type_1 = sum(errors == 1) / max(measured - outer_bins,1);
 
-type_2 = sum(errors == 2) / max(outer_bins,1);
+
+
+%error rate for those that were measured
+if (measured - outer_bins) ~= 0
+    type_1 = (sum(errors == 1) /( measured - outer_bins));
+else
+    type_1 = 0;
+end
+
+if outer_bins ~= 0
+    type_2 = (sum(errors == 2) / outer_bins);
+else
+    type_2 = 0;
 end
 
